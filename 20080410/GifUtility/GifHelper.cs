@@ -553,7 +553,39 @@ namespace Jillzhang.GifUtility
             }
             GifEncoder.Encode(gifImage, outputPath);
         }
-#endregion
+       #endregion
+
+        #region 对Gif图片进行剪裁
+        public static void Crop(string gifFilePath, Rectangle rect, string outFilePath)
+        {
+            if (!File.Exists(gifFilePath))
+            {
+                throw new IOException(string.Format("文件{0}不存在!", gifFilePath));
+            }
+            using (Bitmap ora_Img = new Bitmap(gifFilePath))
+            {
+                if (ora_Img.RawFormat.Guid != ImageFormat.Gif.Guid)
+                {
+                    throw new IOException(string.Format("文件{0}!", gifFilePath));
+                }
+            }
+            GifImage gifImage = GifDecoder.Decode(gifFilePath);
+            ThinkDisposalMethod(gifImage);
+            int index = 0;
+            foreach (GifFrame f in gifImage.Frames)
+            {                
+                f.Image =f.Image.Clone(rect, f.Image.PixelFormat);
+                f.ImageDescriptor.Width = (short)rect.Width;
+                f.ImageDescriptor.Height = (short)rect.Height;
+                if (index++ == 0)
+                {
+                    gifImage.LogicalScreenDescriptor.Width = (short)rect.Width;
+                    gifImage.LogicalScreenDescriptor.Height = (short)rect.Height;
+                }
+            }
+            GifEncoder.Encode(gifImage, outFilePath);
+        }
+        #endregion
 
         #region 私有方法
         static void ThinkDisposalMethod(GifImage gifImage)
@@ -611,7 +643,7 @@ namespace Jillzhang.GifUtility
                     f.Image = newImg;
                 }
                 lastImage = f.Image;
-                Quantizer(f.Image, gifImage.Palette);
+                Quantizer(f.Image, f.Palette);
                 lastDisposal = f.GraphicExtension.DisposalMethod;
                 index++;
             }

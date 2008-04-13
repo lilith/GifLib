@@ -41,7 +41,7 @@ namespace Jillzhang.GifUtility
     /// </summary>
     internal class GifImage
     {
-        #region 背景图片的长度        
+        #region 背景图片的长度 
         /// <summary>
         /// 背景图片的长度
         /// </summary>
@@ -54,7 +54,7 @@ namespace Jillzhang.GifUtility
         }
         #endregion
 
-        #region 背景图片的高度      
+        #region 背景图片的高度
         /// <summary>
         /// 背景图片的高度
         /// </summary>
