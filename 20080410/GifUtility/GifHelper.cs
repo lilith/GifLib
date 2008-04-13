@@ -556,6 +556,12 @@ namespace Jillzhang.GifUtility
        #endregion
 
         #region 对Gif图片进行剪裁
+        /// <summary>
+        /// 对Gif图片进行剪裁
+        /// </summary>
+        /// <param name="gifFilePath">原图像</param>
+        /// <param name="rect">剪裁区域</param>
+        /// <param name="outFilePath">输出路径</param>
         public static void Crop(string gifFilePath, Rectangle rect, string outFilePath)
         {
             if (!File.Exists(gifFilePath))
