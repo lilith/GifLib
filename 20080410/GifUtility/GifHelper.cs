@@ -41,7 +41,7 @@ namespace Jillzhang.GifUtility
 {
     public class GifHelper
     {
-        #region 对gif动画添加水印
+        #region 对gif动画添加水印-字体颜色不定,根据调色板决定
         /// <summary>
         /// 对gif动画添加水印
         /// </summary>
@@ -67,6 +67,99 @@ namespace Jillzhang.GifUtility
             }         
             GifImage gifImage = GifDecoder.Decode(gifFilePath);
             ThinkDisposalMethod(gifImage);
+            Color textColor = textForceColor;// Color.FromArgb(closestC); 
+            gifImage.LogicalScreenDescriptor.GlobalColorTableFlag = false;
+            foreach (GifFrame f in gifImage.Frames)
+            {
+                Graphics g = Graphics.FromImage(f.Image);
+                g.DrawString(text, font, new SolidBrush(textColor), new PointF(x, y));
+                g.Dispose();
+                bool hasTextColor = false;
+                Color32[] colors = PaletteHelper.GetColor32s(f.LocalColorTable);
+                foreach (Color32 c in colors)
+                {
+                    if (c.ARGB == textColor.ToArgb())
+                    {
+                        hasTextColor = true;
+                        break;
+                    }
+                }
+                if (!hasTextColor)
+                {
+                    if (f.Palette.Length < 256)
+                    {
+                        int newSize = f.Palette.Length*2;
+                        Color32[] newColors = new Color32[newSize];
+                        newColors[f.Palette.Length] = new Color32(textColor.ToArgb());
+                        Array.Copy(colors, newColors, colors.Length);
+                        byte[] lct = new byte[newColors.Length * 3];
+                        int index = 0;                        
+                        foreach (Color32 c in newColors)
+                        {
+                            lct[index++] = c.Red;
+                            lct[index++] = c.Green;
+                            lct[index++] = c.Blue; 
+                        }
+                        f.LocalColorTable = lct;
+                        f.ImageDescriptor.LctFlag = true;
+                        f.ImageDescriptor.LctSize = newSize;
+                        f.ColorDepth = f.ColorDepth+1;
+                    }
+                    else
+                    {
+                        OcTreeQuantizer q = new OcTreeQuantizer(8);
+                        Color32[] cs = q.Quantizer(f.Image);
+                        byte[] lct = new byte[cs.Length * 3];
+                        int index = 0;
+                        int colorCount = 0;
+                        foreach (Color32 c in cs)
+                        {
+                            lct[index++] = c.Red;
+                            lct[index++] = c.Green;
+                            lct[index++] = c.Blue;
+                            if (c.ARGB == f.BgColor.ARGB)
+                            {
+                                f.GraphicExtension.TranIndex = (byte)colorCount;
+                            }
+                            colorCount++;
+                        }
+                        f.LocalColorTable = lct;
+                        f.ImageDescriptor.LctFlag = true;
+                        f.ImageDescriptor.LctSize = 256;
+                        f.ColorDepth = 8;
+                    }
+                }
+            }
+            GifEncoder.Encode(gifImage, outputPath);
+        }
+        #endregion   
+
+        #region 对gif动画添加水印-字体颜色确定
+        /// <summary>
+        /// 对gif动画添加水印
+        /// </summary>
+        /// <param name="gifFilePath">原gif动画的路径</param>
+        /// <param name="text">水印文字</param>
+        /// <param name="textForceColor">水印文字的颜色，因为gif不是真彩色图片，所以在显示的时候，该颜色可能有所误差，但基本上可以确定颜色范围</param>
+        /// <param name="font">字体</param>
+        /// <param name="x">水印位置横坐标</param>
+        /// <param name="y">水印位置纵坐标</param>
+        /// <param name="outputPath">输出路径</param>
+        public static void SmartWaterMark(string gifFilePath, string text, Color textForceColor, Font font, float x, float y, string outputPath)
+        {
+            if (!File.Exists(gifFilePath))
+            {
+                throw new IOException(string.Format("文件{0}不存在!", gifFilePath));
+            }
+            using (Bitmap ora_Img = new Bitmap(gifFilePath))
+            {
+                if (ora_Img.RawFormat.Guid != ImageFormat.Gif.Guid)
+                {
+                    throw new IOException(string.Format("文件{0}!", gifFilePath));
+                }
+            }
+            GifImage gifImage = GifDecoder.Decode(gifFilePath);
+            ThinkDisposalMethod(gifImage);
             Color textColor = textForceColor;// Color.FromArgb(closestC);           
             foreach (GifFrame f in gifImage.Frames)
             {
@@ -77,6 +170,7 @@ namespace Jillzhang.GifUtility
             GifEncoder.Encode(gifImage, outputPath);
         }
         #endregion   
+
 
         #region gif动画缩略
         /// <summary>

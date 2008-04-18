@@ -47,10 +47,21 @@ namespace Jillzhang.GifUtility
         private int _colorSize = 3;
         private byte[] _lct;
         private GraphicEx _graphicEx;
-        private byte[] _buffer;
+        private byte[] _buffer;        
         #endregion
 
         #region internal property
+        /// <summary>
+        /// 该桢的背景色
+        /// </summary>
+        public Color32 BgColor
+        {
+            get
+            {
+                Color32[] act = PaletteHelper.GetColor32s(LocalColorTable);
+                return act[GraphicExtension.TranIndex];
+            }            
+        }
         /// <summary>
         /// 图象标识符(Image Descriptor)
         /// 一个GIF文件内可以包含多幅图象
