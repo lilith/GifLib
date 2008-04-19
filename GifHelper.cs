@@ -41,7 +41,7 @@ namespace Jillzhang.GifUtility
 {
     public class GifHelper
     {
-        #region 对gif动画添加水印
+        #region 对gif动画添加水印-字体颜色不定,根据调色板决定
         /// <summary>
         /// 对gif动画添加水印
         /// </summary>
@@ -64,9 +64,100 @@ namespace Jillzhang.GifUtility
                 {
                     throw new IOException(string.Format("文件{0}!", gifFilePath));
                 }
+            }         
+            GifImage gifImage = GifDecoder.Decode(gifFilePath);
+            ThinkDisposalMethod(gifImage);
+            Color textColor = textForceColor;// Color.FromArgb(closestC); 
+            gifImage.LogicalScreenDescriptor.GlobalColorTableFlag = false;
+            foreach (GifFrame f in gifImage.Frames)
+            {
+                Graphics g = Graphics.FromImage(f.Image);
+                g.DrawString(text, font, new SolidBrush(textColor), new PointF(x, y));
+                g.Dispose();
+                bool hasTextColor = false;
+                Color32[] colors = PaletteHelper.GetColor32s(f.LocalColorTable);
+                foreach (Color32 c in colors)
+                {
+                    if (c.ARGB == textColor.ToArgb())
+                    {
+                        hasTextColor = true;
+                        break;
+                    }
+                }
+                if (!hasTextColor)
+                {
+                    if (f.Palette.Length < 256)
+                    {
+                        int newSize = f.Palette.Length*2;
+                        Color32[] newColors = new Color32[newSize];
+                        newColors[f.Palette.Length] = new Color32(textColor.ToArgb());
+                        Array.Copy(colors, newColors, colors.Length);
+                        byte[] lct = new byte[newColors.Length * 3];
+                        int index = 0;                        
+                        foreach (Color32 c in newColors)
+                        {
+                            lct[index++] = c.Red;
+                            lct[index++] = c.Green;
+                            lct[index++] = c.Blue; 
+                        }
+                        f.LocalColorTable = lct;
+                        f.ImageDescriptor.LctFlag = true;
+                        f.ImageDescriptor.LctSize = newSize;
+                        f.ColorDepth = f.ColorDepth+1;
+                    }
+                    else
+                    {
+                        OcTreeQuantizer q = new OcTreeQuantizer(8);
+                        Color32[] cs = q.Quantizer(f.Image);
+                        byte[] lct = new byte[cs.Length * 3];
+                        int index = 0;
+                        int colorCount = 0;
+                        foreach (Color32 c in cs)
+                        {
+                            lct[index++] = c.Red;
+                            lct[index++] = c.Green;
+                            lct[index++] = c.Blue;
+                            if (c.ARGB == f.BgColor.ARGB)
+                            {
+                                f.GraphicExtension.TranIndex = (byte)colorCount;
+                            }
+                            colorCount++;
+                        }
+                        f.LocalColorTable = lct;
+                        f.ImageDescriptor.LctFlag = true;
+                        f.ImageDescriptor.LctSize = 256;
+                        f.ColorDepth = 8;
+                    }
+                }
             }
-            int lastDisposal = 0;
-            Bitmap lastImage = null;
+            GifEncoder.Encode(gifImage, outputPath);
+        }
+        #endregion   
+
+        #region 对gif动画添加水印-字体颜色确定
+        /// <summary>
+        /// 对gif动画添加水印
+        /// </summary>
+        /// <param name="gifFilePath">原gif动画的路径</param>
+        /// <param name="text">水印文字</param>
+        /// <param name="textForceColor">水印文字的颜色，因为gif不是真彩色图片，所以在显示的时候，该颜色可能有所误差，但基本上可以确定颜色范围</param>
+        /// <param name="font">字体</param>
+        /// <param name="x">水印位置横坐标</param>
+        /// <param name="y">水印位置纵坐标</param>
+        /// <param name="outputPath">输出路径</param>
+        public static void SmartWaterMark(string gifFilePath, string text, Color textForceColor, Font font, float x, float y, string outputPath)
+        {
+            if (!File.Exists(gifFilePath))
+            {
+                throw new IOException(string.Format("文件{0}不存在!", gifFilePath));
+            }
+            using (Bitmap ora_Img = new Bitmap(gifFilePath))
+            {
+                if (ora_Img.RawFormat.Guid != ImageFormat.Gif.Guid)
+                {
+                    throw new IOException(string.Format("文件{0}!", gifFilePath));
+                }
+            }
             GifImage gifImage = GifDecoder.Decode(gifFilePath);
             ThinkDisposalMethod(gifImage);
             Color textColor = textForceColor;// Color.FromArgb(closestC);           
@@ -78,68 +169,8 @@ namespace Jillzhang.GifUtility
             }
             GifEncoder.Encode(gifImage, outputPath);
         }
-        #endregion
+        #endregion   
 
-        static void ThinkDisposalMethod(GifImage gifImage)
-        {
-            int lastDisposal = 0;
-            Bitmap lastImage = null;
-            int index = 0;
-            short width = gifImage.Width;
-            short height = gifImage.Height;
-            foreach (GifFrame f in gifImage.Frames)
-            {
-                int xOffSet = f.ImageDescriptor.XOffSet;
-                int yOffSet = f.ImageDescriptor.YOffSet;
-                int iw = f.ImageDescriptor.Width;
-                int ih = f.ImageDescriptor.Height;
-                if ((f.Image.Width != width || f.Image.Height != height))
-                {
-                    f.ImageDescriptor.XOffSet = 0;
-                    f.ImageDescriptor.YOffSet = 0;
-                    f.ImageDescriptor.Width = (short)width;
-                    f.ImageDescriptor.Height = (short)height;
-                }
-                int transIndex = -1;
-                if (f.GraphicExtension.TransparencyFlag)
-                {
-                    transIndex = f.GraphicExtension.TranIndex;
-                }
-                if (iw == width && ih == height && index == 0)
-                {
-
-                }
-                else
-                {
-                    int bgColor = Convert.ToInt32(gifImage.GlobalColorIndexedTable[f.GraphicExtension.TranIndex]);
-                    Color c = Color.FromArgb(bgColor);
-                    Bitmap newImg = null;
-                    Graphics g;
-                    newImg = new Bitmap(width, height);
-                    g = Graphics.FromImage(newImg);
-                    if (lastImage != null)
-                    {
-                        g.DrawImageUnscaled(lastImage, new Point(0, 0));
-                    }
-                    if (f.GraphicExtension.DisposalMethod == 1)
-                    {
-                        g.DrawRectangle(new Pen(new SolidBrush(c)), new Rectangle(xOffSet, yOffSet, iw, ih));
-                    }
-                    if (f.GraphicExtension.DisposalMethod == 2 && lastDisposal != 1)
-                    {
-                        g.Clear(c);
-                    }
-                    g.DrawImageUnscaled(f.Image, new Point(xOffSet, yOffSet));
-                    g.Dispose();
-                    f.Image.Dispose();
-                    f.Image = newImg;
-                }
-                lastImage = f.Image;
-                Quantizer(f.Image, gifImage.Palette);
-                lastDisposal = f.GraphicExtension.DisposalMethod;
-                index++;
-            }
-        }
 
         #region gif动画缩略
         /// <summary>
@@ -415,9 +446,9 @@ namespace Jillzhang.GifUtility
                 f.GraphicExtension.TranIndex = 0;
                 f.ColorDepth = 2;
                 f.ImageDescriptor.LctFlag = false;
-                index++;
-                GifEncoder.Encode(gifImage, outputPath);
+                index++;               
             }
+            GifEncoder.Encode(gifImage, outputPath);
         }
         #endregion
 
@@ -512,7 +543,6 @@ namespace Jillzhang.GifUtility
         }
         #endregion
 
-
         #region 合并多个gif动画,在空间坐标上
         /// <summary>
         /// 合并多个gif动画,在空间坐标上
@@ -581,6 +611,144 @@ namespace Jillzhang.GifUtility
         }
         #endregion
 
+        #region 将Gif图片进行旋转或者翻转
+        /// <summary>
+        /// 将Gif图片进行旋转或者翻转
+        /// </summary>
+        /// <param name="gifFilePath">原图像路径</param>
+        /// <param name="rotateType">翻转或者旋转方式</param>
+        /// <param name="outputPath">输出路径</param>
+        public static void Rotate(string gifFilePath, RotateFlipType rotateType, string outputPath)
+        {
+            if (!File.Exists(gifFilePath))
+            {
+                throw new IOException(string.Format("文件{0}不存在!", gifFilePath));
+            }
+            using (Bitmap ora_Img = new Bitmap(gifFilePath))
+            {
+                if (ora_Img.RawFormat.Guid != ImageFormat.Gif.Guid)
+                {
+                    throw new IOException(string.Format("文件{0}!", gifFilePath));
+                }
+            }
+            GifImage gifImage = GifDecoder.Decode(gifFilePath);
+            ThinkDisposalMethod(gifImage);
+            int index = 0;
+            foreach (GifFrame f in gifImage.Frames)
+            {
+                f.Image.RotateFlip(rotateType);
+                f.ImageDescriptor.Width = (short)f.Image.Width;
+                f.ImageDescriptor.Height = (short)f.Image.Height;
+                if (index++ == 0)
+                {
+                    gifImage.LogicalScreenDescriptor.Width = (short)f.Image.Width;
+                    gifImage.LogicalScreenDescriptor.Height = (short)f.Image.Height;
+                }
+            }
+            GifEncoder.Encode(gifImage, outputPath);
+        }
+       #endregion
+
+        #region 对Gif图片进行剪裁
+        /// <summary>
+        /// 对Gif图片进行剪裁
+        /// </summary>
+        /// <param name="gifFilePath">原图像</param>
+        /// <param name="rect">剪裁区域</param>
+        /// <param name="outFilePath">输出路径</param>
+        public static void Crop(string gifFilePath, Rectangle rect, string outFilePath)
+        {
+            if (!File.Exists(gifFilePath))
+            {
+                throw new IOException(string.Format("文件{0}不存在!", gifFilePath));
+            }
+            using (Bitmap ora_Img = new Bitmap(gifFilePath))
+            {
+                if (ora_Img.RawFormat.Guid != ImageFormat.Gif.Guid)
+                {
+                    throw new IOException(string.Format("文件{0}!", gifFilePath));
+                }
+            }
+            GifImage gifImage = GifDecoder.Decode(gifFilePath);
+            ThinkDisposalMethod(gifImage);
+            int index = 0;
+            foreach (GifFrame f in gifImage.Frames)
+            {                
+                f.Image =f.Image.Clone(rect, f.Image.PixelFormat);
+                f.ImageDescriptor.Width = (short)rect.Width;
+                f.ImageDescriptor.Height = (short)rect.Height;
+                if (index++ == 0)
+                {
+                    gifImage.LogicalScreenDescriptor.Width = (short)rect.Width;
+                    gifImage.LogicalScreenDescriptor.Height = (short)rect.Height;
+                }
+            }
+            GifEncoder.Encode(gifImage, outFilePath);
+        }
+        #endregion
+
+        #region 私有方法
+        static void ThinkDisposalMethod(GifImage gifImage)
+        {
+            int lastDisposal = 0;
+            Bitmap lastImage = null;
+            int index = 0;
+            short width = gifImage.Width;
+            short height = gifImage.Height;
+            foreach (GifFrame f in gifImage.Frames)
+            {
+                int xOffSet = f.ImageDescriptor.XOffSet;
+                int yOffSet = f.ImageDescriptor.YOffSet;
+                int iw = f.ImageDescriptor.Width;
+                int ih = f.ImageDescriptor.Height;
+                if ((f.Image.Width != width || f.Image.Height != height))
+                {
+                    f.ImageDescriptor.XOffSet = 0;
+                    f.ImageDescriptor.YOffSet = 0;
+                    f.ImageDescriptor.Width = (short)width;
+                    f.ImageDescriptor.Height = (short)height;
+                }
+                int transIndex = -1;
+                if (f.GraphicExtension.TransparencyFlag)
+                {
+                    transIndex = f.GraphicExtension.TranIndex;
+                }
+                if (iw == width && ih == height && index == 0)
+                {
+
+                }
+                else
+                {
+                    int bgColor = Convert.ToInt32(gifImage.GlobalColorIndexedTable[f.GraphicExtension.TranIndex]);
+                    Color c = Color.FromArgb(bgColor);
+                    Bitmap newImg = null;
+                    Graphics g;
+                    newImg = new Bitmap(width, height);
+                    g = Graphics.FromImage(newImg);
+                    if (lastImage != null)
+                    {
+                        g.DrawImageUnscaled(lastImage, new Point(0, 0));
+                    }
+                    if (f.GraphicExtension.DisposalMethod == 1)
+                    {
+                        g.DrawRectangle(new Pen(new SolidBrush(c)), new Rectangle(xOffSet, yOffSet, iw, ih));
+                    }
+                    if (f.GraphicExtension.DisposalMethod == 2 && lastDisposal != 1)
+                    {
+                        g.Clear(c);
+                    }
+                    g.DrawImageUnscaled(f.Image, new Point(xOffSet, yOffSet));
+                    g.Dispose();
+                    f.Image.Dispose();
+                    f.Image = newImg;
+                }
+                lastImage = f.Image;
+                Quantizer(f.Image, f.Palette);
+                lastDisposal = f.GraphicExtension.DisposalMethod;
+                index++;
+            }
+        }
+
         static GifFrame Merge(List<GifFrame> frames)
         {
             Bitmap bmp = null;
@@ -631,5 +799,6 @@ namespace Jillzhang.GifUtility
             }
             return buffer;
         }
+        #endregion
     }
 }
