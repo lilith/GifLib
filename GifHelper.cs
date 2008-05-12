@@ -39,9 +39,14 @@ using System.Collections;
 
 namespace Jillzhang.GifUtility
 {
+    public enum SizeMode
+    {
+        Large,
+        Normal
+    }
     public class GifHelper
     {
-        #region 对gif动画添加水印-字体颜色不定,根据调色板决定
+        #region 对gif动画添加水印-字体颜色确定
         /// <summary>
         /// 对gif动画添加水印
         /// </summary>
@@ -52,7 +57,7 @@ namespace Jillzhang.GifUtility
         /// <param name="x">水印位置横坐标</param>
         /// <param name="y">水印位置纵坐标</param>
         /// <param name="outputPath">输出路径</param>
-        public static void WaterMark(string gifFilePath, string text, Color textForceColor, Font font, float x, float y, string outputPath)
+        public static void WaterMark(string gifFilePath, SizeMode sizeMode, string text, Color textForceColor, Font font, float x, float y, string outputPath)
         {
             if (!File.Exists(gifFilePath))
             {
@@ -64,77 +69,84 @@ namespace Jillzhang.GifUtility
                 {
                     throw new IOException(string.Format("文件{0}!", gifFilePath));
                 }
-            }         
+            }
             GifImage gifImage = GifDecoder.Decode(gifFilePath);
-            ThinkDisposalMethod(gifImage);
-            Color textColor = textForceColor;// Color.FromArgb(closestC); 
-            gifImage.LogicalScreenDescriptor.GlobalColorTableFlag = false;
+            if (sizeMode == SizeMode.Large)
+            {
+                ThinkDisposalMethod(gifImage);
+            }
+            Color textColor = textForceColor;
+            int frameCount = 0;
             foreach (GifFrame f in gifImage.Frames)
             {
-                Graphics g = Graphics.FromImage(f.Image);
-                g.DrawString(text, font, new SolidBrush(textColor), new PointF(x, y));
-                g.Dispose();
-                bool hasTextColor = false;
-                Color32[] colors = PaletteHelper.GetColor32s(f.LocalColorTable);
-                foreach (Color32 c in colors)
+                if ((sizeMode == SizeMode.Normal && frameCount++ == 0) || sizeMode == SizeMode.Large)
                 {
-                    if (c.ARGB == textColor.ToArgb())
+                    Graphics g = Graphics.FromImage(f.Image);
+                    g.DrawString(text, font, new SolidBrush(textColor), new PointF(x, y));
+                    g.Dispose();
+                    bool hasTextColor = false;
+                    Color32[] colors = PaletteHelper.GetColor32s(f.LocalColorTable);
+                    foreach (Color32 c in colors)
                     {
-                        hasTextColor = true;
-                        break;
-                    }
-                }
-                if (!hasTextColor)
-                {
-                    if (f.Palette.Length < 256)
-                    {
-                        int newSize = f.Palette.Length*2;
-                        Color32[] newColors = new Color32[newSize];
-                        newColors[f.Palette.Length] = new Color32(textColor.ToArgb());
-                        Array.Copy(colors, newColors, colors.Length);
-                        byte[] lct = new byte[newColors.Length * 3];
-                        int index = 0;                        
-                        foreach (Color32 c in newColors)
+                        if (c.ARGB == textColor.ToArgb())
                         {
-                            lct[index++] = c.Red;
-                            lct[index++] = c.Green;
-                            lct[index++] = c.Blue; 
+                            hasTextColor = true;
+                            break;
                         }
-                        f.LocalColorTable = lct;
-                        f.ImageDescriptor.LctFlag = true;
-                        f.ImageDescriptor.LctSize = newSize;
-                        f.ColorDepth = f.ColorDepth+1;
                     }
-                    else
+                    if (!hasTextColor)
                     {
-                        OcTreeQuantizer q = new OcTreeQuantizer(8);
-                        Color32[] cs = q.Quantizer(f.Image);
-                        byte[] lct = new byte[cs.Length * 3];
-                        int index = 0;
-                        int colorCount = 0;
-                        foreach (Color32 c in cs)
+                        if (f.Palette.Length < 256)
                         {
-                            lct[index++] = c.Red;
-                            lct[index++] = c.Green;
-                            lct[index++] = c.Blue;
-                            if (c.ARGB == f.BgColor.ARGB)
+                            int newSize = f.Palette.Length * 2;
+                            Color32[] newColors = new Color32[newSize];
+                            newColors[f.Palette.Length] = new Color32(textColor.ToArgb());
+                            Array.Copy(colors, newColors, colors.Length);
+                            byte[] lct = new byte[newColors.Length * 3];
+                            int index = 0;
+                            foreach (Color32 c in newColors)
                             {
-                                f.GraphicExtension.TranIndex = (byte)colorCount;
+                                lct[index++] = c.Red;
+                                lct[index++] = c.Green;
+                                lct[index++] = c.Blue;
                             }
-                            colorCount++;
+                            f.LocalColorTable = lct;
+                            f.ImageDescriptor.LctFlag = true;
+                            f.ImageDescriptor.LctSize = newSize;
+                            f.ColorDepth = f.ColorDepth + 1;
                         }
-                        f.LocalColorTable = lct;
-                        f.ImageDescriptor.LctFlag = true;
-                        f.ImageDescriptor.LctSize = 256;
-                        f.ColorDepth = 8;
+                        else
+                        {
+                            OcTreeQuantizer q = new OcTreeQuantizer(8);
+                            Color32[] cs = q.Quantizer(f.Image);
+                            byte[] lct = new byte[cs.Length * 3];
+                            int index = 0;
+                            int colorCount = 0;
+                            foreach (Color32 c in cs)
+                            {
+                                lct[index++] = c.Red;
+                                lct[index++] = c.Green;
+                                lct[index++] = c.Blue;
+                                if (c.ARGB == f.BgColor.ARGB)
+                                {
+                                    f.GraphicExtension.TranIndex = (byte)colorCount;
+                                }
+                                colorCount++;
+                            }
+                            Quantizer(f.Image, cs);
+                            f.LocalColorTable = lct;
+                            f.ImageDescriptor.LctFlag = true;
+                            f.ImageDescriptor.LctSize = 256;
+                            f.ColorDepth = 8;
+                        }
                     }
                 }
             }
             GifEncoder.Encode(gifImage, outputPath);
         }
-        #endregion   
+        #endregion
 
-        #region 对gif动画添加水印-字体颜色确定
+        #region  对gif动画添加水印-字体颜色不定,根据调色板决定
         /// <summary>
         /// 对gif动画添加水印
         /// </summary>
@@ -169,8 +181,62 @@ namespace Jillzhang.GifUtility
             }
             GifEncoder.Encode(gifImage, outputPath);
         }
-        #endregion   
+        #endregion
 
+        #region 对gif动画添加图片水印
+        /// <summary>
+        /// 对gif动画添加图片水印
+        /// </summary>
+        /// <param name="gifFilePath">原图片路径</param>
+        /// <param name="waterImg">水印图片</param>
+        /// <param name="x">横坐标</param>
+        /// <param name="y">纵坐标</param>
+        /// <param name="outputPath">输出路径</param>
+        public static void WaterMark(string gifFilePath, Bitmap waterImg, float x, float y, string outputPath)
+        {
+            if (!File.Exists(gifFilePath))
+            {
+                throw new IOException(string.Format("文件{0}不存在!", gifFilePath));
+            }
+            using (Bitmap ora_Img = new Bitmap(gifFilePath))
+            {
+                if (ora_Img.RawFormat.Guid != ImageFormat.Gif.Guid)
+                {
+                    throw new IOException(string.Format("文件{0}!", gifFilePath));
+                }
+            }
+            GifImage gifImage = GifDecoder.Decode(gifFilePath);
+            ThinkDisposalMethod(gifImage);
+            foreach (GifFrame f in gifImage.Frames)
+            {
+                Graphics g = Graphics.FromImage(f.Image);
+                g.DrawImage(waterImg, new PointF(x, y));
+                g.Dispose();
+                OcTreeQuantizer q = new OcTreeQuantizer(8);
+                Color32[] cs = q.Quantizer(f.Image);
+                byte[] lct = new byte[cs.Length * 3];
+                int index = 0;
+                int colorCount = 0;
+                foreach (Color32 c in cs)
+                {
+                    lct[index++] = c.Red;
+                    lct[index++] = c.Green;
+                    lct[index++] = c.Blue;
+                    if (c.ARGB == f.BgColor.ARGB)
+                    {
+                        f.GraphicExtension.TranIndex = (byte)colorCount;
+                    }
+                    colorCount++;
+                }
+                Quantizer(f.Image, cs);
+                f.LocalColorTable = lct;
+                f.ImageDescriptor.LctFlag = true;
+                f.ImageDescriptor.LctSize = 256;
+                f.ColorDepth = 8;
+            }
+            GifEncoder.Encode(gifImage, outputPath);
+        }
+        #endregion
 
         #region gif动画缩略
         /// <summary>
@@ -215,8 +281,8 @@ namespace Jillzhang.GifUtility
                     Bitmap bmp = new Bitmap(f.ImageDescriptor.Width, f.ImageDescriptor.Height);
                     Graphics g = Graphics.FromImage(bmp);
                     g.DrawImage(f.Image, new Rectangle(0, 0, f.ImageDescriptor.Width, f.ImageDescriptor.Height));
-                    g.Dispose();
-                    Quantizer(bmp, gifImage.Palette);
+                    g.Dispose();                  
+                    Quantizer(bmp, f.Palette);
                     f.Image.Dispose();
                     f.Image = bmp;
                     index++;
@@ -446,7 +512,7 @@ namespace Jillzhang.GifUtility
                 f.GraphicExtension.TranIndex = 0;
                 f.ColorDepth = 2;
                 f.ImageDescriptor.LctFlag = false;
-                index++;               
+                index++;
             }
             GifEncoder.Encode(gifImage, outputPath);
         }
@@ -647,7 +713,7 @@ namespace Jillzhang.GifUtility
             }
             GifEncoder.Encode(gifImage, outputPath);
         }
-       #endregion
+        #endregion
 
         #region 对Gif图片进行剪裁
         /// <summary>
@@ -673,8 +739,8 @@ namespace Jillzhang.GifUtility
             ThinkDisposalMethod(gifImage);
             int index = 0;
             foreach (GifFrame f in gifImage.Frames)
-            {                
-                f.Image =f.Image.Clone(rect, f.Image.PixelFormat);
+            {
+                f.Image = f.Image.Clone(rect, f.Image.PixelFormat);
                 f.ImageDescriptor.Width = (short)rect.Width;
                 f.ImageDescriptor.Height = (short)rect.Height;
                 if (index++ == 0)

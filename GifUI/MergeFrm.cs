@@ -11,6 +11,7 @@ namespace GifUI
 {
     public partial class MergeFrm : Form
     {
+        public int MergeType = 0;
         public MergeFrm()
         {
             InitializeComponent();
@@ -66,6 +67,10 @@ namespace GifUI
         private void button1_Click(object sender, EventArgs e)
         {
             this.DialogResult = DialogResult.OK;
+            if (radioButton2.Checked)
+            {
+                MergeType = 1;
+            }
             this.Close();
         }    
     }

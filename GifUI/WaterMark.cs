@@ -28,6 +28,18 @@ namespace GifUI
                 _text = value;
             }
         }
+        Bitmap _image;
+        public Bitmap WaterImage
+        {
+            get
+            {
+                return _image;
+            }
+            set
+            {
+                _image = value;
+            }
+        }
 
         private void button2_Click(object sender, EventArgs e)
         {           
@@ -58,6 +70,22 @@ namespace GifUI
             if (dr == DialogResult.OK)
             {
                 this.richTextBox1.ForeColor = colorDialog1.Color;                
+            }
+        }
+
+        private void button5_Click(object sender, EventArgs e)
+        {
+            _image = new Bitmap(pictureBox1.ImageLocation);
+            this.DialogResult = DialogResult.OK;
+            this.Close();
+        }
+
+        private void button1_Click(object sender, EventArgs e)
+        {
+            DialogResult dr = openFileDialog1.ShowDialog();
+            if (dr == DialogResult.OK)
+            {
+                pictureBox1.ImageLocation = openFileDialog1.FileName;
             }
         }
     }

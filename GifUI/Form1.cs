@@ -86,7 +86,12 @@ namespace GifUI
                     }
                 case "WaterMark":
                     {
-                        GifHelper.WaterMark(pictureBox1.ImageLocation, wmText.Text, wmText.ForceColor, wmText.Font, StartX, StartY, outGifPath);
+                        GifHelper.WaterMark(pictureBox1.ImageLocation, SizeMode.Large, wmText.Text, wmText.ForceColor, wmText.Font, StartX, StartY, outGifPath);
+                        break;
+                    }
+                case "WaterMarkWithImage":
+                    {
+                        GifHelper.WaterMark(pictureBox1.ImageLocation, waterImg, StartX, StartY, outGifPath);
                         break;
                     }
                 case "Corp":
@@ -97,6 +102,12 @@ namespace GifUI
                 case "Merge":
                     {
                         GifHelper.Merge(mf.SourceFiles, outGifPath);
+                        openFileDialog1.FileName = outGifPath;
+                        break;
+                    }
+                case "Merge1":
+                    {
+                        GifHelper.Merge(mf.SourceFiles, outGifPath,50,true);
                         openFileDialog1.FileName = outGifPath;
                         break;
                     }
@@ -268,6 +279,7 @@ namespace GifUI
         float StartX = -1;
         float StartY = -1;
         WaterMarkText wmText;
+        Bitmap waterImg;
         private void pictureBox1_MouseDown(object sender, MouseEventArgs e)
         {
             if (e.Button == MouseButtons.Left && this.pictureBox1.Cursor == Cursors.Cross && !wantCorp)
@@ -280,10 +292,20 @@ namespace GifUI
                 DialogResult dr  =   wm.ShowDialog();
                 if (dr == DialogResult.OK)
                 {
-                    wmText = wm.WaterMarkText;
-                    toolStripButton2.Enabled = false;
-                    backgroundWorker1.RunWorkerAsync("WaterMark");
-                    toolStripStatusLabel1.Text = "正在对图像添加水印.....";
+                    if (wm.WaterImage == null)
+                    {
+                        wmText = wm.WaterMarkText;
+                        toolStripButton2.Enabled = false;
+                        backgroundWorker1.RunWorkerAsync("WaterMark");
+                        toolStripStatusLabel1.Text = "正在对图像添加水印.....";
+                    }
+                    else
+                    {
+                        waterImg = wm.WaterImage;
+                        toolStripButton2.Enabled = false;
+                        backgroundWorker1.RunWorkerAsync("WaterMarkWithImage");
+                        toolStripStatusLabel1.Text = "正在对图像添加图像水印.....";
+                    }
                 }
             }
             else if (e.Button == MouseButtons.Left && this.pictureBox1.Cursor == Cursors.Cross && wantCorp)
@@ -333,7 +355,14 @@ namespace GifUI
             DialogResult dr =  mf.ShowDialog();
             if (dr == DialogResult.OK)
             {
-                backgroundWorker1.RunWorkerAsync("Merge");
+                if (mf.MergeType == 1)
+                {
+                    backgroundWorker1.RunWorkerAsync("Merge");                   
+                }
+                else
+                {
+                    backgroundWorker1.RunWorkerAsync("Merge1");                   
+                }
                 toolStripStatusLabel1.Text = "正在对合成Gif图像.....";
             }
         }
